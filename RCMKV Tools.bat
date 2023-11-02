@@ -4,7 +4,6 @@ set name=RCMKV Tools&set version=v0.0
 setlocal&cd /d "%~dp0"
 title %name%   "%cd%"
 
-
 :Start                            
 set "SelectedThing=%~f1"
 set "SelectedThingPath=%~dp1"
@@ -44,7 +43,13 @@ set /p "Command=%_%%w_%%FolderName%%_%%gn_%>"
 set "Command=%Command:"=%"
 echo %-% &echo %-% &echo %-%
 
-if /i "%Command%"=="keyword"		goto FI-Keyword
+if /i "%Command%"=="setup"		goto Setup-Options
+if /i "%Command%"=="Activate"	set "Setup_Select=1" &goto Setup-Choice
+if /i "%Command%"=="Deactivate"	set "Setup_Select=2" &goto Setup-Choice
+if /i "%Command%"=="uninstall"	set "Setup_Select=2" &goto Setup-Choice
+if /i "%Command%"=="Act"			set "Setup_Select=1" &goto Setup-Choice
+if /i "%Command%"=="Dct"			set "Setup_Select=2" &goto Setup-Choice
+if /i "%Command%"=="Deact"		set "Setup_Select=2" &goto Setup-Choice
 
 if exist "%Command%" set "input=%command:"=%"&goto directInput
 goto Input-Error
@@ -60,9 +65,10 @@ REM Other
 if /i "%Context%"=="MKV.Cover-Delete"		goto MKV-Cover-Delete
 if /i "%Context%"=="MKV.Subtitle-Merge"	goto MKV-Subtitle-Merge
 if /i "%Context%"=="MKV.Extract"			goto MKV-Extract
-if /i "%Context%"=="MP4.to.MKV"				goto MKV-Convert
-if /i "%Context%"=="AVI.to.MKV"				goto MKV-Convert
-if /i "%Context%"=="TS.to.MKV"				goto MKV-Convert
+if /i "%Context%"=="MP4.to.MKV"				set ConvertedExt=.mkv&goto MKV-Convert
+if /i "%Context%"=="AVI.to.MKV"				set ConvertedExt=.mkv&goto MKV-Convert
+if /i "%Context%"=="TS.to.MKV"				set ConvertedExt=.mkv&goto MKV-Convert
+if /i "%Context%"=="MKV.to.MP4"				set ConvertedExt=.mp4&goto MKV-Convert
 if /i "%Context%"=="SRT.Rename"				set "SubtitleExtension=srt"&goto SUB-Rename
 if /i "%Context%"=="ASS.Rename"				set "SubtitleExtension=ass"&goto SUB-Rename
 if /i "%Context%"=="XML.Rename"				set "SubtitleExtension=xml"&goto SUB-Rename
@@ -100,6 +106,7 @@ echo.
 echo %TAB%   %i_%%cc_%  Done!  %_%
 goto options
 
+
 :MKV-Convert
 call :Timer-start
 echo %TAB%    %i_%  Converting to MKV..  %_%
@@ -111,22 +118,31 @@ for %%M in (%xSelected%) do (
 			set "size_B=%%~zM"
 			set "display=NOTMKV"
 			call :FileSize
+			%Separator%
 			call :MKV-Convert-display
 			PUSHD "%%~dpM" || echo %i_%%r_%  FAIL to PUSHD..  %_%
-				start /wait "%%~nxM" cmd.exe /c echo.^&echo.^&echo. ^
-				^&echo %TAB%%cc_%Converting..%_% ^
-				^&echo  "%c_%%%~nxM%_%"%gg_% ^
-				^&"%MKVmerge%" -o "%%~nM.mkv" "%%~nxM"
+			if /i "%ConvertedExt%"==".mkv" (
+					"%MKVmerge%" -o "%%~nM%ConvertedExt%" "%%~nxM" 
+					"%MKVmerge%" |exit /b
+			) else (
+				start /wait "%%~nxM" "%ffmpeg%" -i "%%~nxM" -c:v copy -c:a copy -scodec mov_text -map 0 -y "%%~nM%ConvertedExt%"
+			)
 			POPD
-			if exist "%%~dpnM.mkv" (
-				for %%K in ("%%~dpnM.mkv") do (
+			if exist "%%~dpnM%ConvertedExt%" (
+				for %%K in ("%%~dpnM%ConvertedExt%") do (
+					echo %TAB%    %cc_%Convert success.%_%
 					set "MKVname=%%~nxK"
 					set "size_B=%%~zK"
 					set "display=MKV"
 					call :FileSize
 					call :MKV-Convert-display
 				)
-			) else (echo %TAB%%r_%%i_%Convert Fail!%_% "%%~nxM")
+			) else (
+				echo %TAB%    %r_%Convert fail.%_%
+				echo %TAB%%g_%🎞%ESC%%r_%%%~nM%ConvertedExt% %g_%()%ESC%
+			)
+			%Separator%
+			echo.&echo.
 		)
 	)
 )
@@ -136,15 +152,14 @@ goto options
 
 :MKV-Convert-display
 if "%display%"=="MKV" (
-	echo %TAB%%c_%🎞%ESC%%MKVname% %pp_%%size%%_% %g_%(%size_B% Bytes)%ESC%
+	echo %TAB%%c_%🎞%ESC%%MKVname% %pp_%%size%%_% %g_%(%size_B% Bytes)%ESC%%g_%
 ) else (
-	echo %TAB%%gg_%🎞%ESC%%MP4name% %pp_%%size%%_% %g_%(%size_B% Bytes)%ESC%
+	echo %TAB%%gg_%🎞%ESC%%MP4name% %pp_%%size%%_% %g_%(%size_B% Bytes)%ESC%%g_%
 )
 exit /b
 
 :MKV-Subtitle-Merge
 call :Timer-start
-set MKVMergeSeparator=echo %_%-------------------------------------------------------------------------%_%
 echo %TAB%    %i_%  Merging subtitle into MKV..  %_%
 echo.
 REM Detecting font..
@@ -204,10 +219,10 @@ for %%X in (%SubtitleSupport%) do (
 )
 
 if %Found% LSS 1 (
-	%MKVMergeSeparator%
+	%Separator%
 	echo %MKVfileDisplay_%
 	echo %r_%📄 %g_%No subtitles matched the MKV file name.%_%
-	%MKVMergeSeparator%
+	%Separator%
 	echo.&echo.
 	POPD&exit /b
 )
@@ -239,7 +254,7 @@ echo.&echo.
 POPD&exit /b
 
 :MKV-Subtitle-display_sub
-%MKVMergeSeparator%
+%Separator%
 for %%F in ("%subFound%") do (
 	set "size_B=%%~zF"
 	call :FileSize
@@ -249,7 +264,7 @@ if /i "%MKVDisplay%"=="yes" if found LSS 1 echo %MKVfileDisplay_%
 set "MKVDisplay=no"
 echo %yy_%📄%ESC%%yy_%%subFound%%_% %pp_%%size% %g_%(%size_B% Bytes)%_%%ESC%
 echo %ESC%  %g_%Name:%w_%%SubName%	%g_%Language:%w_%%subLang%	%g_%Default:%w_%%SubSetAsDefault%	%g_%Force:%w_%%SubForcedDisplay%%ESC%
-%MKVMergeSeparator%
+%Separator%
 exit /b
 
 :MKV-Subtitle-get_language
@@ -331,106 +346,6 @@ echo.
 exit /b
 
 
-:SUB-Rename-Collect.VID
-if exist "%filename:~0,-4%.%SubtitleExtension%" (
-	echo %ESC%%g_%┌%g_%🎞 %g_%%filename%%ESC%
-	echo %ESC%%g_%└%g_%📄 %g_%%filename:~0,-4%.%SubtitleExtension% %gn_%✓%g_%%ESC%
-	echo.
-	exit /b
-)
-set /a VIDcount+=1
-set "VIDfile%VIDcount%=%filename%"
-exit /b
-
-:SUB-Rename-Collect.SUB
-if exist "%filename:~0,-4%.mkv" exit /b
-if exist "%filename:~0,-4%.mp4" exit /b
-set /a SUBcount+=1
-set "SUBfile%SUBcount%=%filename%"
-exit /b
-
-
-:SUB-Rename-Display
-set /a DisplayCount+=1
-call set "VIDfile=%%VIDfile%List%%%"
-call set "SUBfile=%%SUBfile%List%%%"
-
-if defined SUBfile%List% (
-	echo %ESC%┌%c_%🎞 %c_%%VIDfile%%ESC%
-	echo %ESC%└%w_%📄 %_%%SUBfile%%ESC%
-) else (
-	echo %ESC% %c_%🎞 %c_%%VIDfile%%ESC%
-	echo %ESC% %c_%   %g_%No subtitle file.%ESC%
-)
-if not %DisplayCount% EQU %VIDcount% echo.
-exit /b
-
-:SUB-Rename-Action
-set /a DisplayCount+=1
-call set "VIDfile=%%VIDfile%List%%%"
-call set "SUBfile=%%SUBfile%List%%%"
-
-if defined SUBfile%List% (
-	echo %ESC%┌%c_%🎞 %c_%%VIDfile%%ESC%
-	echo %ESC%│%g_%📄 %SUBfile%%ESC%
-	echo %ESC%└%w_%📄 %w_%%VIDfile:~0,-4%.%SubtitleExtension%%ESC%
-	ren "%SUBfile%" "%VIDfile:~0,-4%.%SubtitleExtension%"
-) else (
-	echo %ESC% %c_%🎞 %c_%%VIDfile%%ESC%
-	echo %ESC% %c_%   %g_%No subtitle file.%ESC%
-)
-if not %DisplayCount% EQU %VIDcount% echo.
-exit /b
-
-:SUB-Rename
-for %%D in (%xSelected%) do set "SelectedThingPath=%%~dpD"
-cd /d "%SelectedThingPath%"
-set ActTitle=SUBTITLE
-if /i ".%SubtitleExtension%"==".XML" set set ActTitle=CHAPTER
-set separator=echo  %g_%---------------------------------------------------------------------------------%_%
-
-	echo                     %i_%%w_% %ActTitle% AUTO RENAME %_%
-	echo               %g_%Rename subtitle to video file name.%_%
-	echo.
-echo %i_%%cc_%1/2%_%%cc_% %u_%Matching files..                 %_%
-echo.
-%separator%
-set VIDcount=0
-for %%L in (*) do (
-	set "filename=%%~nxL"
-	if /i "%%~xL"==".MKV" call :SUB-Rename-Collect.VID
-	if /i "%%~xL"==".MP4" call :SUB-Rename-Collect.VID
-	if /i "%%~xL"==".%SubtitleExtension%" call :SUB-Rename-Collect.SUB
-)
-if %VIDcount% GTR 0 for /L %%F in (1,1,%VIDcount%) do (
-	set List=%%F
-	if defined VIDfile%%F call :SUB-Rename-Display
-) else (
-	echo.
-	echo.
-	echo    %g_%^(No %r_%*%c_%.MKV%g_%, %r_%*%c_%.MP4%g_% found. / No files to be proceed.^)%_%
-)
-%separator%
-if %VIDcount% LSS 1 pause>nul&exit
-echo  %i_%%gn_% %_% %g_%Press %cc_%^[A^]%g_% to Confirm. Press %r_%^[B^]%g_% to Cancel.%bk_%
-CHOICE /N /C AB
-if %errorlevel%==2 exit
-echo.
-echo.
-echo.
-echo %i_%%cc_%2/2%_%%cc_% %u_%Renaming files..                 %_%
-echo.
-%separator%
-set DisplayCount=0
-for /L %%F in (1,1,%VIDcount%) do (
-	set List=%%F
-	if defined VIDfile%%F call :SUB-Rename-Action
-)
-%separator%
-echo.
-echo    %i_%   Done.   %_%
-pause>nul&exit
-
 :FileSize                         
 if "%size_B%"=="" set size=0 KB&echo %r_%Error: Fail to get file size!%_% &exit /b
 set /a size_KB=%size_B%/1024
@@ -467,10 +382,10 @@ if 1%ms% lss 100 set ms=0%ms%
 :: Mission accomplished
 set /a totalsecs = %hours%*3600 + %mins%*60 + %secs%
 if %mins% lss 1 set "show_mins="
-if %mins% gtr 0 set "show_mins=%mins%m "
+if %mins% gtr 0 set "show_mins=%mins% minutes "
 if %hours% lss 1 set "show_hours="
-if %hours% gtr 0 set "show_hours=%hours%h " 
-set ExecutionTime=%show_hours%%show_mins%%secs%.%ms%s
+if %hours% gtr 0 set "show_hours=%hours% hours " 
+set ExecutionTime=%show_hours%%show_mins%%secs%.%ms% seconds
 set "processingtime=The process took %ExecutionTime% ^|"
 exit /b
 
@@ -497,7 +412,7 @@ if not defined TemplateIconSize set "TemplateIconSize=Auto"
 	echo TemplateIconSize="%TemplateIconSize%"
 	echo ExitWait="%ExitWait%"
 	
-)>"%~dp0config.ini"
+)>"%RCMKVconfig%"
 if /i "%TemplateIconSize%"=="Auto" set "TemplateIconSize="
 set "Template=%rcfi%\template\%Template:"=%.bat"
 set "TemplateForICO=%rcfi%\template\%TemplateForICO:"=%.bat"
@@ -507,9 +422,9 @@ EXIT /B
 
 :Config-Load                      
 REM Load Config from config.ini
-if not exist "%~dp0config.ini" call :Config-GetDefault
-if exist "%~dp0config.ini" (
-	for /f "usebackq tokens=1,2 delims==" %%C in ("%~dp0config.ini") do (set "%%C=%%D")
+if not exist "%RCMKVconfig%" call :Config-GetDefault
+if exist "%RCMKVconfig%" (
+	for /f "usebackq tokens=1,2 delims==" %%C in ("%RCMKVconfig%") do (set "%%C=%%D")
 ) else (
 	echo.&echo.&echo.&echo.
 	echo       %w_%Couldn't load config.ini.   %r_%Access is denied.
@@ -541,7 +456,7 @@ cd /d "%~dp0"
 	echo Preset="(none)"
 	echo PresetAlwaysAsk="No"
 	echo ExitWait="100"
-)>"%~dp0config.ini"
+)>"%RCMKVconfig%"
 EXIT /B
 
 
@@ -578,14 +493,17 @@ set p5=ping localhost -n 5 ^>nul
 set "RCMKV=%~dp0"
 set "RCMKV=%RCMKV:~0,-1%"
 set "RCMKVD=%RCMKV%\uninstall.cmd"
+set "RCMKVconfig=%~dp0RCMKV.Config.ini"
 set "timestart="
+set "Separator=echo %_%-------------------------------------------------------------------------%_%"
 
 rem Define some variables for MKV Tools
 set "mkvpropedit=%RCMKV%\resources\mkvpropedit.exe"
 set "mkvmerge=%RCMKV%\resources\mkvmerge.exe"
 set "mkvextract=%RCMKV%\resources\mkvextract.exe"
 set "mkvinfo=%RCMKV%\resources\mkvinfo.exe"
-set "VideoSupport=.mp4,.avi,.ts"
+set "ffmpeg=%RCMKV%\resources\ffmpeg.exe"
+set "VideoSupport=.mp4,.avi,.ts,.mkv"
 set "SubtitleSupport=srt,sub,ass"
 set "SubLanguage=ID"
 set "SubName=Bahasa Indonesia"
@@ -717,11 +635,11 @@ rem Generating setup_*.reg
 (
 	echo Windows Registry Editor Version 5.00
 
-	:REG-Context_Menu-MKV-Extract_Subtitle
-	echo [%RegExMKV%\RCMKV.MKV.Extract]
-	echo "MUIVerb"="Extract MKV"
-	echo [%RegExMKV%\RCMKV.MKV.Extract\command]
-	echo @="%SCMD% set \"Context=MKV.Extract\"%SRCMKVexe% \"%%1\""
+rem	:REG-Context_Menu-MKV-Extract_Subtitle
+rem	echo [%RegExMKV%\RCMKV.MKV.Extract]
+rem	echo "MUIVerb"="Extract MKV"
+rem	echo [%RegExMKV%\RCMKV.MKV.Extract\command]
+rem	echo @="%SCMD% set \"Context=MKV.Extract\"%SRCMKVexe% \"%%1\""
 
 	:REG-Context_Menu-MKV-Cover_Remove
 	echo [%RegExMKV%\RCMKV.MKV.RemoveCover-Delete]
@@ -731,7 +649,7 @@ rem Generating setup_*.reg
 	
 	:REG-Context_Menu-MKV-Merge_Subtitle
 	echo [%RegExMKV%\RCMKV.MKV.Subtitle-Merge]
-	echo "MUIVerb"="Merge files into MKV"
+	echo "MUIVerb"="Merge Subtitle into MKV"
 	echo [%RegExMKV%\RCMKV.MKV.Subtitle-Merge\command]
 	echo @="%SCMD% set \"Context=MKV.Subtitle-Merge\"%SRCMKVexe% \"%%1\""
 
@@ -752,25 +670,12 @@ rem Generating setup_*.reg
 	echo "MUIVerb"="Convert TS to MKV"
 	echo [%RegExTS%\RCMKV.TS.Convert.to.MKV\command]
 	echo @="%SCMD% set \"Context=TS.to.MKV\"%SRCMKVexe% \"%%1\""
-
-	:REG-Context_Menu-SRT_Rename
-	echo [%RegExSRT%\RCMKV.SRT.Rename]
-	echo "MUIVerb"="Rename subtitle to video"
-	echo [%RegExSRT%\RCMKV.SRT.Rename\command]
-	echo @="%SCMD% set \"Context=SRT.Rename\"%SRCMKVexe% \"%%1\""
-
-
-	:REG-Context_Menu-ASS_Rename
-	echo [%RegExASS%\RCMKV.ASS.Rename]
-	echo "MUIVerb"="Rename subtitle to video"
-	echo [%RegExASS%\RCMKV.ASS.Rename\command]
-	echo @="%SCMD% set \"Context=ASS.Rename\"%SRCMKVexe% \"%%1\""
-
-	:REG-Context_Menu-XML_Rename
-	echo [%RegExXML%\RCMKV.XML.Rename]
-	echo "MUIVerb"="Rename XML to video"
-	echo [%RegExXML%\RCMKV.XML.Rename\command]
-	echo @="%SCMD% set \"Context=XML.Rename\"%SRCMKVexe% \"%%1\""
+	
+	:REG-Context_Menu-MKV
+	echo [%RegExMKV%\RCMKV.MKV.Convert.to.MP4]
+	echo "MUIVerb"="Convert MKV to MP4"
+	echo [%RegExMKV%\RCMKV.MKV.Convert.to.MP4\command]
+	echo @="%SCMD% set \"Context=MKV.to.MP4\"%SRCMKVexe% \"%%1\""
 	
 )>>"%Setup_Write%"
 exit /b
