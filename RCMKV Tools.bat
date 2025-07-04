@@ -68,6 +68,8 @@ if /i "%Context%"=="MKV.Extract"			goto MKV-Extract
 if /i "%Context%"=="MP4.to.MKV"				set ConvertedExt=.mkv&goto MKV-Convert
 if /i "%Context%"=="AVI.to.MKV"				set ConvertedExt=.mkv&goto MKV-Convert
 if /i "%Context%"=="TS.to.MKV"				set ConvertedExt=.mkv&goto MKV-Convert
+if /i "%Context%"=="FLV.to.MKV"				set ConvertedExt=.mkv&goto MKV-Convert
+if /i "%Context%"=="WEBM.to.MKV"				set ConvertedExt=.mkv&goto MKV-Convert
 if /i "%Context%"=="MKV.to.MP4"				set ConvertedExt=.mp4&goto MKV-Convert
 if /i "%Context%"=="SRT.Rename"				set "SubtitleExtension=srt"&goto SUB-Rename
 if /i "%Context%"=="ASS.Rename"				set "SubtitleExtension=ass"&goto SUB-Rename
@@ -159,6 +161,9 @@ if "%display%"=="MKV" (
 exit /b
 
 :MKV-Subtitle-Merge
+rem set "SubName=Bahasa Indonesia"
+rem set /p "SubName=%_%%w_%Subtitle name%_%:%gn_%"
+
 call :Timer-start
 echo %TAB%    %i_%  Merging subtitle into MKV..  %_%
 echo.
@@ -227,7 +232,22 @@ if %Found% LSS 1 (
 	POPD&exit /b
 )
 
+
 echo %_%Subtitle found ^(%gn_%%Found%%_%^), %_%Adding subtitle into MKV ..%g_%
+
+:: Removing default flag on all substitles
+set "SubsFlagSet="
+set "SubsCount="
+for /f "tokens=1,2 delims=:" %%A in ('call "%MKVMERGE%" --identify "%MKVname%.mkv"') do (
+	set "TrackType=%%B"
+	set "TrackID=%%A"
+	call :MKV-Subtitle-get_TrackID
+	)
+)
+
+"%MKVPROPEDIT%" "%MKVname%.mkv" %SubsFlagSet%
+
+:: Merging subtitles
 "%MKVMERGE%" -o "%SubFileNamePrefix%%MKVname%%SubFileNameSuffix%.mkv" "%MKVname%.mkv" %subtitleSet%
 if exist "%MKVname%.xml" (
 	echo %_%Chapters found: "%MKVname%.xml"
@@ -275,6 +295,15 @@ set subtitleSet= %subtitleSet%^
 	--track-name		0:"%SubName%" ^
 	--default-track	0:"%SubSetAsDefault%" ^
 	"%subFound%"
+exit /b
+
+:MKV-Subtitle-get_TrackID
+if "%TrackType%"=="%TrackType:Subtitles=%" exit /b
+set /a SubsCount+=1
+set "SubsFlag=--edit track:s%SubsCount% --set flag-default=0"
+if defined SubsFlagSet (
+	set "SubsFlagSet=%SubsFlagSet% %SubsFlag%"
+) else set "SubsFlagSet=%SubsFlag%"
 exit /b
 
 :MKV-Subtitle-Font
@@ -453,7 +482,7 @@ EXIT /B
 cd /d "%~dp0"
 (
 	echo DrivePath="%cd%"
-	echo Preset="(none)"
+	echo Preset="Default"
 	echo PresetAlwaysAsk="No"
 	echo ExitWait="100"
 )>"%RCMKVconfig%"
@@ -503,14 +532,16 @@ set "mkvmerge=%RCMKV%\resources\mkvmerge.exe"
 set "mkvextract=%RCMKV%\resources\mkvextract.exe"
 set "mkvinfo=%RCMKV%\resources\mkvinfo.exe"
 set "ffmpeg=%RCMKV%\resources\ffmpeg.exe"
-set "VideoSupport=.mp4,.avi,.ts,.mkv"
+set "VideoSupport=.mp4,.avi,.ts,.mkv,.flv,.webm"
 set "SubtitleSupport=srt,sub,ass"
-set "SubLanguage=ID"
-set "SubName=Bahasa Indonesia"
-set "SubSetAsDefault=Yes"
-set "SubForcedDisplay=No"
-set "SubFileNamePrefix="
-set "SubFileNameSuffix=_"
+set "SubPreset=%RCMKV%\preset\Default.ini"
+for /f "usebackq tokens=1,2 delims==" %%C in ("%SubPreset%") do (set "%%C=%%D")
+set "SubLanguage=%SubLanguage:"=%"
+set "SubName=%SubName:"=%"
+set "SubSetAsDefault=%SubSetAsDefault:"=%"
+set "SubForcedDisplay=%SubForcedDisplay:"=%"
+set "SubFileNamePrefix=%SubFileNamePrefix:"=%"
+set "SubFileNameSuffix=%SubFileNameSuffix:"=%"
 set "ExitWait=100"
 
 exit /b
@@ -625,11 +656,12 @@ rem Define registry root
 	set RegExMKV=%HKEY%_CLASSES_ROOT\SystemFileAssociations\.mkv\shell
 	set RegExMP4=%HKEY%_CLASSES_ROOT\SystemFileAssociations\.mp4\shell
 	set RegExAVI=%HKEY%_CLASSES_ROOT\SystemFileAssociations\.avi\shell
+	set RegExFLV=%HKEY%_CLASSES_ROOT\SystemFileAssociations\.flv\shell
 	set RegExSRT=%HKEY%_CLASSES_ROOT\SystemFileAssociations\.srt\shell
 	set RegExASS=%HKEY%_CLASSES_ROOT\SystemFileAssociations\.ass\shell
 	set RegExXML=%HKEY%_CLASSES_ROOT\SystemFileAssociations\.xml\shell
 	set RegExTS=%HKEY%_CLASSES_ROOT\SystemFileAssociations\.ts\shell
-
+	set RegExWEBM=%HKEY%_CLASSES_ROOT\SystemFileAssociations\.webm\shell
 
 rem Generating setup_*.reg
 (
@@ -665,11 +697,23 @@ rem	echo @="%SCMD% set \"Context=MKV.Extract\"%SRCMKVexe% \"%%1\""
 	echo [%RegExAVI%\RCMKV.AVI.Convert.to.MKV\command]
 	echo @="%SCMD% set \"Context=AVI.to.MKV\"%SRCMKVexe% \"%%1\""
 
+	:REG-Context_Menu-FLV
+	echo [%RegExFLV%\RCMKV.FLV.Convert.to.MKV]
+	echo "MUIVerb"="Convert FLV to MKV"
+	echo [%RegExFLV%\RCMKV.FLV.Convert.to.MKV\command]
+	echo @="%SCMD% set \"Context=FLV.to.MKV\"%SRCMKVexe% \"%%1\""
+	
 	:REG-Context_Menu-TS
 	echo [%RegExTS%\RCMKV.TS.Convert.to.MKV]
 	echo "MUIVerb"="Convert TS to MKV"
 	echo [%RegExTS%\RCMKV.TS.Convert.to.MKV\command]
 	echo @="%SCMD% set \"Context=TS.to.MKV\"%SRCMKVexe% \"%%1\""
+	
+	:REG-Context_Menu-WEBM
+	echo [%RegExWEBM%\RCMKV.WEBM.Convert.to.MKV]
+	echo "MUIVerb"="Convert WEBM to MKV"
+	echo [%RegExWEBM%\RCMKV.WEBM.Convert.to.MKV\command]
+	echo @="%SCMD% set \"Context=WEBM.to.MKV\"%SRCMKVexe% \"%%1\""
 	
 	:REG-Context_Menu-MKV
 	echo [%RegExMKV%\RCMKV.MKV.Convert.to.MP4]
